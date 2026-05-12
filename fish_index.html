@@ -21,13 +21,15 @@
             width: 100%;
             height: 100%;
         }
-        #ui-layer {
+        .fullscreen-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             pointer-events: none;
+        }
+        #ui-layer {
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -77,12 +79,6 @@
             100% { transform: scale(1); opacity: 1; }
         }
         #vignette {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
             background: radial-gradient(circle, rgba(0,0,0,0) 50%, rgba(0,0,0,0.7) 100%);
             z-index: 10;
         }
@@ -102,7 +98,7 @@
 </head>
 <body>
 
-    <div id="vignette"></div>
+    <div id="vignette" class="fullscreen-overlay"></div>
     <canvas id="gameCanvas"></canvas>
 
     <!-- Map UI Overlay: Strictly pointer-events-none -->
@@ -115,7 +111,7 @@
     </div>
 
     <!-- UI Layer -->
-    <div id="ui-layer" class="p-4 sm:p-8 z-20">
+    <div id="ui-layer" class="fullscreen-overlay p-4 sm:p-8 z-20">
         <div class="flex justify-between items-start">
             <div class="flex gap-4">
                 <button id="openMapBtn" class="btn-game interactive px-4 py-3 rounded flex items-center gap-2 shadow-lg z-20">
@@ -127,7 +123,7 @@
                     <p class="text-xs text-gray-300 mt-1">Score: <span id="scoreDisplay" class="font-bold text-white">0</span></p>
                 </div>
             </div>
-            
+
             <div id="instructionPanel" class="bg-black/40 backdrop-blur-sm rounded-lg p-4 text-right text-white/80 text-sm max-w-[200px] border border-white/10 hidden sm:block">
                 WASD to drive.<br>Hold to cast.<br>Wait for a bite.<br>Click to hook.
             </div>
@@ -160,7 +156,7 @@
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    
+
     const actionPrompt = document.getElementById('actionPrompt');
     const fishingUI = document.getElementById('fishingUI');
     const tensionBar = document.getElementById('tensionBar');
@@ -182,8 +178,8 @@
     let fishDistance = 100, lineTension = 0, currentFish = null;
     let isReeling = false, waitTimer = 0, biteTimer = 0, hasCastOnce = false;
     let particles = [], clouds = [], mountainsL1 = [], mountainsL2 = [], foregroundElements = [];
-    let currentEnv = {}; 
-    
+    let currentEnv = {};
+
     let keys = { w: false, a: false, s: false, d: false };
     const boatSpeed = 3.5;
 
@@ -199,31 +195,31 @@
 
     // --- BIOMES ---
     const BIOMES = {
-        LAND: { id: 'land', isWater: false, color: '#4d7c0f' }, 
-        FOREST: { id: 'forest', isWater: false, color: '#166534' }, 
+        LAND: { id: 'land', isWater: false, color: '#4d7c0f' },
+        FOREST: { id: 'forest', isWater: false, color: '#166534' },
         SAND: { id: 'sand', isWater: false, color: '#854d0e' }, // Earthy coast color
-        
-        SHALLOWS: { 
+
+        SHALLOWS: {
             id: 'shallows', name: 'Sunlit Shallows', isWater: true, color: '#0284c7', titleColor: '#bae6fd',
             skyTop: [14, 165, 233], skyBot: [240, 249, 255], waterColor: [59, 130, 246], fog: 0, foregroundType: 'reeds',
             fishSpawns: [{id: 'can', weight: 40}, {id: 'perch', weight: 60}]
         },
-        KELP: { 
+        KELP: {
             id: 'kelp', name: 'Whispering Kelp', isWater: true, color: '#0f766e', titleColor: '#5eead4',
             skyTop: [20, 83, 45], skyBot: [204, 251, 241], waterColor: [20, 83, 45], fog: 0.05, foregroundType: 'reeds',
             fishSpawns: [{id: 'perch', weight: 30}, {id: 'trout', weight: 50}, {id: 'grouper', weight: 20}]
         },
-        PIER: { 
+        PIER: {
             id: 'pier', name: 'The Old Pier', isWater: true, color: '#475569', titleColor: '#cbd5e1',
             skyTop: [71, 85, 105], skyBot: [203, 213, 225], waterColor: [71, 85, 105], fog: 0.15, foregroundType: 'pylons',
             fishSpawns: [{id: 'can', weight: 50}, {id: 'trout', weight: 50}]
         },
-        BAYOU: { 
+        BAYOU: {
             id: 'bayou', name: "Drifter's Bayou", isWater: true, color: '#064e3b', titleColor: '#6ee7b7',
             skyTop: [88, 28, 135], skyBot: [16, 185, 129], waterColor: [15, 45, 35], fog: 0.2, foregroundType: 'deadtrees',
             fishSpawns: [{id: 'can', weight: 20}, {id: 'trout', weight: 20}, {id: 'eel', weight: 60}]
         },
-        DEEP: { 
+        DEEP: {
             id: 'deep', name: 'Archive Deep', isWater: true, color: '#1e3a8a', titleColor: '#60a5fa',
             skyTop: [2, 6, 23], skyBot: [30, 58, 138], waterColor: [10, 20, 60], fog: 0.35, foregroundType: 'none',
             fishSpawns: [{id: 'trout', weight: 20}, {id: 'grouper', weight: 40}, {id: 'lurker', weight: 40}]
@@ -237,21 +233,21 @@
     let currentLocation = BIOMES.SHALLOWS;
 
     let mapPlayerPos = { x: 0, y: 0 };
-    const mapRes = 5; 
+    const mapRes = 5;
     let mapData = [];
-    let mapDecorations = []; 
-    let mapClouds = []; 
+    let mapDecorations = [];
+    let mapClouds = [];
     let offscreenMapCanvas = document.createElement('canvas');
     let offCtx = offscreenMapCanvas.getContext('2d');
-    
+
     let seedOffset = 0;
-    
+
     // Stable math hash so it doesn't break at high offsets
     function hash(x, y) {
         let h = Math.sin(x * 12.9898 + y * 78.233 + seedOffset) * 43758.5453123;
         return h - Math.floor(h);
     }
-    
+
     function vnoise(x, y) {
         let i = Math.floor(x), j = Math.floor(y);
         let f_x = x - i, f_y = y - j;
@@ -259,7 +255,7 @@
         let a = hash(i, j), b = hash(i + 1, j), c = hash(i, j + 1), d = hash(i + 1, j + 1);
         return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
     }
-    
+
     function fbm(x, y) {
         return (vnoise(x, y)*0.5 + vnoise(x*2.0, y*2.0)*0.25 + vnoise(x*4.0, y*4.0)*0.125) / 0.875;
     }
@@ -280,7 +276,7 @@
         let ch = canvas.height;
         offscreenMapCanvas.width = cw;
         offscreenMapCanvas.height = ch;
-        
+
         let cols = Math.ceil(cw / mapRes);
         let rows = Math.ceil(ch / mapRes);
         mapData = Array(cols).fill().map(()=>Array(rows).fill('LAND'));
@@ -288,25 +284,25 @@
         generateMapClouds(cw, ch);
 
         seedOffset = Math.random() * 10000; // New map seed every load
-        
+
         for(let i=0; i<cols; i++) {
             for(let j=0; j<rows; j++) {
                 let nx = i / cols;
                 let ny = j / rows;
-                
+
                 // Distance from center (0 = center, ~0.7 = corners)
                 let dx = nx - 0.5;
                 let dy = ny - 0.5;
                 let distToCenter = Math.hypot(dx, dy);
                 let normDist = Math.min(1.0, distToCenter * 2.0); // 0 at center, 1 at edges
-                
+
                 let noiseBase = fbm(nx * 3, ny * 3);
-                
+
                 // Create a Bowl: elevation is low in middle, high at edges
                 let el = noiseBase * 0.4 + Math.pow(normDist, 2.5) * 0.8;
-                
+
                 let biomeKey = 'SHALLOWS';
-                
+
                 if (el > 0.65) {
                     biomeKey = (fbm(nx * 5, ny * 5) > 0.5) ? 'FOREST' : 'LAND';
                 } else if (el > 0.55) {
@@ -314,12 +310,12 @@
                 } else {
                     // It's water! Let's paint the organic biomes based on anchors
                     let zoneNoise = fbm(nx * 4 + 10, ny * 4 + 10) * 0.35;
-                    
+
                     let dBayou = Math.hypot(nx - 0.8, ny - 0.2); // Top Right
                     let dPier  = Math.hypot(nx - 0.2, ny - 0.8); // Bottom Left
                     let dHexed = Math.hypot(nx - 0.35, ny - 0.35); // Top Left-ish
                     let dDeep  = Math.hypot(nx - 0.5, ny - 0.5); // Center
-                    
+
                     if (dBayou - zoneNoise < 0.2) biomeKey = 'BAYOU';
                     else if (dPier - zoneNoise < 0.2) biomeKey = 'PIER';
                     else if (dHexed - zoneNoise < 0.1) biomeKey = 'HEXED';
@@ -327,17 +323,17 @@
                     else if (fbm(nx * 6 + 20, ny * 6 + 20) > 0.6) biomeKey = 'KELP';
                     else biomeKey = 'SHALLOWS';
                 }
-                
+
                 mapData[i][j] = biomeKey;
             }
         }
-        
+
         // Render Map to Offscreen Canvas
         for(let i=0; i<cols; i++) {
             for(let j=0; j<rows; j++) {
                 let biomeKey = mapData[i][j];
                 let b = BIOMES[biomeKey];
-                
+
                 // Add texture to the map colors
                 let rTex = Math.random();
                 if (b.isWater) {
@@ -347,7 +343,7 @@
                     offCtx.fillStyle = b.color;
                     offCtx.globalAlpha = 0.85 + rTex * 0.15;
                 }
-                
+
                 offCtx.fillRect(i*mapRes, j*mapRes, mapRes, mapRes);
                 offCtx.globalAlpha = 1.0;
 
@@ -380,7 +376,7 @@
         for(let i=1; i<cols-1; i++) {
             for(let j=1; j<rows-1; j++) {
                 if (BIOMES[mapData[i][j]].isWater && !BIOMES[mapData[i][j-1]].isWater) {
-                    offCtx.fillRect(i*mapRes, j*mapRes, mapRes, 4); 
+                    offCtx.fillRect(i*mapRes, j*mapRes, mapRes, 4);
                 }
             }
         }
@@ -396,7 +392,7 @@
         currentEnv = {
             skyTop: rgbStr(jitterColor(currentLocation.skyTop, 20)),
             skyBot: rgbStr(jitterColor(currentLocation.skyBot, 10)),
-            water: currentLocation.waterColor, 
+            water: currentLocation.waterColor,
             fog: currentLocation.fog + (Math.random() * 0.1 - 0.05),
             waveColors: [
                 rgbaStr(jitterColor(currentLocation.waterColor, 15), 0.6),
@@ -453,7 +449,7 @@
                 });
             }
         }
-        
+
         locationTitle.innerText = currentLocation.name;
         locationTitle.style.color = currentLocation.titleColor;
         scorePanel.style.borderColor = currentLocation.titleColor;
@@ -462,23 +458,23 @@
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        
+
         if (boatX === 0 && boatY === 0) {
-            boatX = canvas.width * 0.45; 
+            boatX = canvas.width * 0.45;
             boatY = canvas.height * 0.75;
         } else {
             boatX = Math.min(Math.max(boatX, 70), canvas.width - 70);
             boatY = Math.min(Math.max(boatY, canvas.height * 0.65 + 10), canvas.height - 30);
         }
-        
+
         buildProceduralMap();
-        
+
         // Find a valid water tile for initial spawn
         if(mapPlayerPos.x === 0) {
             let found = false;
             let cx = Math.floor(mapData.length/2);
             let cy = Math.floor(mapData[0].length/2);
-            
+
             // Spiral search out from center to find water
             for (let r = 0; r < 20 && !found; r++) {
                 for (let i = cx - r; i <= cx + r && !found; i++) {
@@ -495,11 +491,11 @@
                 }
             }
         }
-        
+
         if(currentState !== STATE.MAP) generateEnvironment();
     }
     window.addEventListener('resize', resize);
-    resize(); 
+    resize();
 
     window.addEventListener('keydown', (e) => {
         if(currentState === STATE.MAP) return;
@@ -520,7 +516,7 @@
             currentState = STATE.MAP;
             bobber.active = false;
             hidePrompt();
-            
+
             mapUI.classList.remove('opacity-0');
             openMapBtn.style.display = 'none';
             scorePanel.style.display = 'none';
@@ -537,27 +533,27 @@
 
     function handlePointerDown(e) {
         if(currentState === STATE.MAP) {
-            if(e.target === closeMapBtn || (e.target.closest && e.target.closest('#closeMapBtn'))) return; 
-            
+            if(e.target === closeMapBtn || (e.target.closest && e.target.closest('#closeMapBtn'))) return;
+
             const rect = canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
-            
+
             let bx = Math.floor(mouseX / mapRes);
             let by = Math.floor(mouseY / mapRes);
-            
+
             if (bx >= 0 && bx < mapData.length && by >= 0 && by < mapData[0].length) {
                 let clickedBiome = BIOMES[mapData[bx][by]];
-                
+
                 if (!clickedBiome.isWater) {
                     // Flash warning UI
                     mapFeedback.innerText = "Land! Click on the water.";
                     mapFeedback.style.left = `${mouseX - (window.innerWidth < 600 ? 70 : 100)}px`;
                     mapFeedback.style.top = `${mouseY - 40}px`;
-                    
+
                     // Reset animation
                     mapFeedback.classList.remove('map-warning');
-                    void mapFeedback.offsetWidth; 
+                    void mapFeedback.offsetWidth;
                     mapFeedback.classList.add('map-warning');
                 } else {
                     mapPlayerPos.x = mouseX;
@@ -571,7 +567,7 @@
         }
 
         if(e.target === openMapBtn || e.target === closeMapBtn) return;
-        
+
         switch(currentState) {
             case STATE.IDLE:
                 currentState = STATE.CASTING; castPower = 0; bobber.active = false; hidePrompt();
@@ -611,7 +607,7 @@
 
     canvas.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('pointerup', handlePointerUp);
-    
+
     function showPrompt(text, color = "white", duration = 0, style="catch-text") {
         actionPrompt.innerHTML = `<span class="${style}" style="color: ${color}">${text}</span>`;
         actionPrompt.classList.remove('hidden');
@@ -638,7 +634,7 @@
     function selectFish() {
         let totalWeight = currentLocation.fishSpawns.reduce((sum, spawn) => sum + spawn.weight, 0);
         let rand = Math.random() * totalWeight;
-        let currentWeight = 0, selectedId = 'can'; 
+        let currentWeight = 0, selectedId = 'can';
         for (let spawn of currentLocation.fishSpawns) {
             currentWeight += spawn.weight;
             if (rand <= currentWeight) { selectedId = spawn.id; break; }
@@ -648,7 +644,7 @@
 
     function startMinigame() {
         currentFish = selectFish();
-        fishDistance = Math.max(15, castPower); 
+        fishDistance = Math.max(15, castPower);
         lineTension = 20; isReeling = true;
         fishingUI.classList.remove('translate-x-full', 'opacity-0');
         spawnParticles(bobber.x, bobber.y, 20, '#ffffff');
@@ -658,7 +654,7 @@
         currentState = STATE.RESULT;
         fishingUI.classList.add('translate-x-full', 'opacity-0');
         bobber.active = false;
-        
+
         if (success) {
             score += currentFish.score; scoreDisplay.innerText = score;
             showPrompt(`CAUGHT:<br><span style="font-size:0.6em; color:${currentFish.color}">${currentFish.name}</span><br><span style="font-size:0.4em">+${currentFish.score} PTS</span>`, "#4ade80");
@@ -685,7 +681,7 @@
             castPower += 1.5 * castDirection;
             if (castPower >= 100 || castPower <= 0) castDirection *= -1;
         }
-        
+
         if (bobber.active) {
             if (currentState === STATE.WAITING && Math.abs(bobber.x - bobber.targetX) > 1) {
                 bobber.x += (bobber.targetX - bobber.x) * 0.1; bobber.y += (bobber.targetY - bobber.y) * 0.1;
@@ -705,7 +701,7 @@
         }
 
         if (currentState === STATE.BITE) {
-            biteTimer -= deltaTime; bobber.dipOffset = (Math.random() * 10) + 5; 
+            biteTimer -= deltaTime; bobber.dipOffset = (Math.random() * 10) + 5;
             if (biteTimer <= 0) {
                 currentState = STATE.RESULT; hidePrompt(); showPrompt("TOO SLOW...", "#9ca3af");
                 bobber.active = false; actionPrompt.style.transform = `translate(0px, 0px)`;
@@ -713,25 +709,25 @@
         }
 
         if (currentState === STATE.REELING) {
-            actionPrompt.style.transform = `translate(0px, 0px)`; 
-            
-            if (isReeling) { fishDistance -= 0.35; lineTension += currentFish.tensionRate; } 
+            actionPrompt.style.transform = `translate(0px, 0px)`;
+
+            if (isReeling) { fishDistance -= 0.35; lineTension += currentFish.tensionRate; }
             else { fishDistance += currentFish.pullSpeed; lineTension -= 1.5; }
 
             if (Math.random() < currentFish.struggleChance) {
-                lineTension += currentFish.pullSpeed * currentFish.struggleMultiplier; 
+                lineTension += currentFish.pullSpeed * currentFish.struggleMultiplier;
                 spawnParticles(bobber.x, bobber.y, 6, '#ffffff');
             }
 
             lineTension = Math.max(0, Math.min(100, lineTension));
             fishDistance = Math.max(0, Math.min(100, fishDistance));
-            
+
             let maxPixelDist = canvas.width * 0.7;
             bobber.x = boatX + 50 + (fishDistance / 100) * maxPixelDist;
 
             tensionBar.style.height = `${lineTension}%`;
-            progressBar.style.height = `${100 - fishDistance}%`; 
-            
+            progressBar.style.height = `${100 - fishDistance}%`;
+
             if (lineTension >= 100) endMinigame(false);
             else if (fishDistance >= 100) endMinigame(false);
             else if (fishDistance <= 0) endMinigame(true);
@@ -744,11 +740,11 @@
         mapDecorations.forEach(dec => {
             ctx.save();
             ctx.translate(dec.x, dec.y);
-            
+
             if (dec.type === 'pine') {
-                ctx.fillStyle = '#064e3b'; 
+                ctx.fillStyle = '#064e3b';
                 ctx.beginPath(); ctx.moveTo(0, -dec.size); ctx.lineTo(dec.size*0.8, dec.size); ctx.lineTo(-dec.size*0.8, dec.size); ctx.fill();
-                ctx.fillStyle = '#047857'; 
+                ctx.fillStyle = '#047857';
                 ctx.beginPath(); ctx.moveTo(0, -dec.size); ctx.lineTo(dec.size*0.8, dec.size); ctx.lineTo(0, dec.size); ctx.fill();
             } else if (dec.type === 'tree') {
                 ctx.fillStyle = '#166534';
@@ -762,9 +758,9 @@
                 ctx.beginPath(); ctx.ellipse(-1, -1, dec.size*0.6, dec.size*0.4, 0, 0, Math.PI*2); ctx.fill();
             } else if (dec.type === 'lily') {
                 ctx.fillStyle = '#22c55e';
-                ctx.beginPath(); ctx.arc(0, 0, dec.size, 0, Math.PI*1.8); ctx.fill(); 
+                ctx.beginPath(); ctx.arc(0, 0, dec.size, 0, Math.PI*1.8); ctx.fill();
             } else if (dec.type === 'kelp') {
-                ctx.fillStyle = 'rgba(20, 184, 166, 0.4)'; 
+                ctx.fillStyle = 'rgba(20, 184, 166, 0.4)';
                 ctx.beginPath(); ctx.arc(0, 0, dec.size, 0, Math.PI*2); ctx.fill();
             } else if (dec.type === 'deadtree') {
                 ctx.strokeStyle = '#020617'; ctx.lineWidth = 1.5;
@@ -775,11 +771,11 @@
                 ctx.beginPath(); ctx.moveTo(0, dec.size*0.5); ctx.lineTo(0, -dec.size); ctx.lineTo(dec.size*0.4, -dec.size*1.5); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(0, -dec.size*0.5); ctx.lineTo(-dec.size*0.5, -dec.size); ctx.stroke();
             } else if (dec.type === 'dock') {
-                ctx.fillStyle = '#451a03'; 
+                ctx.fillStyle = '#451a03';
                 ctx.fillRect(-10, -5, 20, 10);
                 ctx.fillStyle = '#78350f';
                 ctx.fillRect(-10, -4, 20, 2); ctx.fillRect(-10, 0, 20, 2);
-                ctx.fillStyle = '#1c1917'; 
+                ctx.fillStyle = '#1c1917';
                 ctx.fillRect(-12, -7, 3, 3); ctx.fillRect(9, -7, 3, 3);
                 ctx.fillRect(-12, 4, 3, 3); ctx.fillRect(9, 4, 3, 3);
             }
@@ -833,15 +829,15 @@
 
         let px = mapPlayerPos.x, py = mapPlayerPos.y;
         let pinY = py + Math.sin(time * 5) * 4;
-        
-        ctx.fillStyle = 'rgba(0,0,0,0.6)'; 
+
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
         ctx.beginPath(); ctx.ellipse(px, py + 8, 8, 4, 0, 0, Math.PI*2); ctx.fill();
 
-        ctx.fillStyle = '#ef4444'; 
+        ctx.fillStyle = '#ef4444';
         ctx.beginPath(); ctx.moveTo(px, pinY + 5); ctx.lineTo(px - 10, pinY - 15);
         ctx.arc(px, pinY - 15, 10, Math.PI, 0); ctx.lineTo(px, pinY + 5); ctx.fill();
-        
-        ctx.fillStyle = '#fee2e2'; 
+
+        ctx.fillStyle = '#fee2e2';
         ctx.beginPath(); ctx.arc(px, pinY - 15, 4, 0, Math.PI*2); ctx.fill();
     }
 
@@ -857,14 +853,14 @@
             ctx.fillStyle = 'rgba(255,255,255,0.8)';
             ctx.beginPath(); ctx.arc(canvas.width * 0.2, canvas.height * 0.2, 30, 0, Math.PI * 2); ctx.fill();
         } else if (currentLocation.id === 'hexed') {
-            ctx.fillStyle = '#fca5a5'; 
+            ctx.fillStyle = '#fca5a5';
             ctx.beginPath(); ctx.arc(canvas.width * 0.3, canvas.height * 0.3, 50, 0, Math.PI * 2); ctx.fill();
         }
 
         clouds.forEach(c => {
             c.x += c.speed; if(c.x > canvas.width + 100) c.x = -100;
             ctx.fillStyle = `rgba(255, 255, 255, ${c.opacity})`;
-            if (currentLocation.id === 'hexed') ctx.fillStyle = `rgba(153, 27, 27, ${c.opacity + 0.2})`; 
+            if (currentLocation.id === 'hexed') ctx.fillStyle = `rgba(153, 27, 27, ${c.opacity + 0.2})`;
             ctx.beginPath(); ctx.arc(c.x, c.y, 20 * c.scale, Math.PI * 0.5, Math.PI * 1.5);
             ctx.arc(c.x + 15 * c.scale, c.y - 10 * c.scale, 25 * c.scale, Math.PI * 1, Math.PI * 1.85);
             ctx.arc(c.x + 35 * c.scale, c.y - 5 * c.scale, 20 * c.scale, Math.PI * 1.37, Math.PI * 1.91);
@@ -879,10 +875,10 @@
 
         // Toned down in-game fogs
         if (currentEnv.fog > 0.1) {
-            let fogAlpha = Math.sin(time) * 0.05 + currentEnv.fog * 0.5; 
+            let fogAlpha = Math.sin(time) * 0.05 + currentEnv.fog * 0.5;
             let fogColor = currentLocation.id === 'hexed' ? 'rgba(153, 27, 27,' : 'rgba(200, 210, 220,';
-            ctx.fillStyle = `${fogColor} ${fogAlpha})`; 
-            ctx.fillRect(0, canvas.height * 0.4, canvas.width, canvas.height * 0.6); 
+            ctx.fillStyle = `${fogColor} ${fogAlpha})`;
+            ctx.fillRect(0, canvas.height * 0.4, canvas.width, canvas.height * 0.6);
         }
 
         let m2Color = currentLocation.id === 'bayou' ? '#064e3b' : (currentLocation.id === 'deep' ? '#0f172a' : (currentLocation.id === 'hexed' ? '#7f1d1d' : '#475569'));
@@ -911,16 +907,16 @@
         let localBob = Math.sin(time * 2) * 2;
         let bY = boatY + localBob;
 
-        ctx.fillStyle = '#451a03'; 
+        ctx.fillStyle = '#451a03';
         ctx.beginPath(); ctx.moveTo(boatX - 70, bY - 5); ctx.lineTo(boatX + 70, bY - 5);
         ctx.lineTo(boatX + 45, bY + 25); ctx.lineTo(boatX - 50, bY + 25); ctx.fill();
-        
+
         ctx.fillStyle = '#78350f'; ctx.fillRect(boatX - 68, bY - 5, 136, 6);
-        
-        ctx.fillStyle = '#1f2937'; ctx.fillRect(boatX - 60, bY - 20, 6, 15); 
-        ctx.fillStyle = currentLocation.id === 'deep' ? '#38bdf8' : (currentLocation.id === 'hexed' ? '#ef4444' : '#fbbf24'); 
+
+        ctx.fillStyle = '#1f2937'; ctx.fillRect(boatX - 60, bY - 20, 6, 15);
+        ctx.fillStyle = currentLocation.id === 'deep' ? '#38bdf8' : (currentLocation.id === 'hexed' ? '#ef4444' : '#fbbf24');
         ctx.fillRect(boatX - 63, bY - 25, 12, 12);
-        
+
         ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.arc(boatX - 57, bY - 19, 40, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
         ctx.fillStyle = '#111827'; ctx.beginPath(); ctx.arc(boatX - 57, bY - 25, 6, Math.PI, 0); ctx.fill();
 
@@ -937,7 +933,7 @@
         ctx.fillStyle = '#fca5a5'; ctx.beginPath(); ctx.arc(25 - armOffset, -5 + armOffset, 4, 0, Math.PI*2); ctx.fill();
         ctx.restore();
 
-        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(boatX + 15, bY - 15); 
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(boatX + 15, bY - 15);
         let rodTipX = boatX + 80, rodTipY = bY - 90, controlY = bY - 50;
 
         if (currentState === STATE.REELING) {
@@ -963,20 +959,20 @@
             ctx.stroke();
         }
     }
-    
+
     function drawForeground() {
         if(currentLocation.foregroundType === 'none') return;
         foregroundElements.forEach(el => {
             if (el.type === 'reed') {
                 let sway = Math.sin((time * el.swaySpeed) + el.offset) * 15;
                 let reedGrad = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - el.height);
-                reedGrad.addColorStop(0, currentLocation.id === 'kelp' ? '#0f766e' : '#064e3b'); 
+                reedGrad.addColorStop(0, currentLocation.id === 'kelp' ? '#0f766e' : '#064e3b');
                 reedGrad.addColorStop(1, currentLocation.id === 'kelp' ? '#14b8a6' : '#059669');
                 ctx.strokeStyle = reedGrad; ctx.lineWidth = 4; ctx.lineCap = 'round';
                 ctx.beginPath(); ctx.moveTo(el.x, canvas.height);
                 ctx.quadraticCurveTo(el.x + (sway * 0.5), canvas.height - (el.height * 0.5), el.x + sway, canvas.height - el.height);
                 ctx.stroke();
-                
+
                 if(el.height > 100) {
                     ctx.fillStyle = '#451a03'; ctx.save();
                     ctx.translate(el.x + (sway * 0.8), canvas.height - el.height + 20); ctx.rotate(sway * 0.01);
@@ -988,7 +984,7 @@
                 ctx.fillRect(-el.width/2, -el.height, el.width, el.height);
                 ctx.fillStyle = '#292524'; ctx.fillRect(-el.width/2 + 2, -el.height, 2, el.height); ctx.restore();
             } else if (el.type === 'tree') {
-                ctx.strokeStyle = el.isRed ? '#450a0a' : '#020617'; 
+                ctx.strokeStyle = el.isRed ? '#450a0a' : '#020617';
                 ctx.lineWidth = 12 * el.scale; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
                 ctx.save(); ctx.translate(el.x, canvas.height); if (el.flip) ctx.scale(-1, 1);
                 ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20 * el.scale, -100 * el.scale); ctx.lineTo(50 * el.scale, -250 * el.scale); ctx.stroke();
