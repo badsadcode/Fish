@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Serene Fishing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0f172a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        .btn-game {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn-game:hover {
+            background: rgba(255, 255, 255, 0.4);
+            border-color: white;
+            transform: scale(1.05);
+        }
+        .tension-bar-container {
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .tension-gradient-vertical {
+            background: linear-gradient(0deg, #4ade80 0%, #facc15 60%, #ef4444 100%);
+        }
+        @keyframes floatText {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-40px) scale(1.1); opacity: 0; }
+        }
+        .catch-text {
+            animation: floatText 2s ease-out forwards;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+        .exclamation {
+            animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            text-shadow: 0px 0px 10px rgba(255, 0, 0, 0.8);
+        }
+        @keyframes pop {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        #vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: radial-gradient(circle, rgba(0,0,0,0) 50%, rgba(0,0,0,0.7) 100%);
+            z-index: 10;
+        }
+        #mapUI {
+            transition: opacity 0.4s ease;
+        }
+        .map-warning {
+            animation: warningFade 1.5s forwards;
+            text-shadow: 2px 2px 0px #000;
+        }
+        @keyframes warningFade {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            70% { opacity: 1; transform: translateY(-20px) scale(1.1); }
+            100% { opacity: 0; transform: translateY(-30px) scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="vignette"></div>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Map UI Overlay: Strictly pointer-events-none -->
+    <div id="mapUI" class="absolute inset-0 z-30 opacity-0 pointer-events-none flex flex-col justify-between items-center py-6 sm:py-10">
+        <div class="bg-black/80 backdrop-blur-md px-6 py-3 rounded-full border border-white/20 shadow-[0_0_20px_rgba(0,0,0,0.8)] flex flex-col items-center">
+            <h2 class="text-lg sm:text-xl font-bold text-white tracking-widest uppercase drop-shadow-lg text-center">World Map</h2>
+            <p class="text-gray-400 text-[10px] sm:text-xs tracking-widest text-center mt-1 uppercase">Click water to travel</p>
+        </div>
+        <button id="closeMapBtn" class="btn-game px-8 py-3 rounded-full interactive pointer-events-auto shadow-[0_0_20px_rgba(0,0,0,0.8)] text-sm sm:text-base mb-4">Return to Game</button>
+    </div>
+
+    <!-- UI Layer -->
+    <div id="ui-layer" class="p-4 sm:p-8 z-20">
+        <div class="flex justify-between items-start">
+            <div class="flex gap-4">
+                <button id="openMapBtn" class="btn-game interactive px-4 py-3 rounded flex items-center gap-2 shadow-lg z-20">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
+                    MAP
+                </button>
+                <div id="scorePanel" class="bg-black/40 backdrop-blur-sm rounded-lg p-3 text-white border border-white/10 shadow-lg transition-colors duration-500">
+                    <h1 id="locationTitle" class="text-xs sm:text-sm font-bold tracking-wider uppercase drop-shadow-md">Sunlit Shallows</h1>
+                    <p class="text-xs text-gray-300 mt-1">Score: <span id="scoreDisplay" class="font-bold text-white">0</span></p>
+                </div>
+            </div>
+
+            <div id="instructionPanel" class="bg-black/40 backdrop-blur-sm rounded-lg p-4 text-right text-white/80 text-sm max-w-[200px] border border-white/10 hidden sm:block">
+                WASD to drive.<br>Hold to cast.<br>Wait for a bite.<br>Click to hook.
+            </div>
+        </div>
+
+        <div class="flex-1 flex items-center justify-center relative">
+            <div id="actionPrompt" class="text-4xl sm:text-6xl font-bold text-white tracking-widest uppercase hidden drop-shadow-lg text-center pointer-events-none"></div>
+            <div id="mapFeedback" class="absolute font-bold tracking-widest uppercase text-red-400 opacity-0 pointer-events-none text-sm sm:text-lg z-40"></div>
+        </div>
+
+        <div class="absolute right-4 sm:right-8 top-1/2 transform -translate-y-1/2 transition-all duration-500 translate-x-full opacity-0 flex flex-row gap-2 sm:gap-4 pointer-events-none" id="fishingUI">
+            <div class="bg-black/60 backdrop-blur-md rounded-2xl p-2 sm:p-3 border border-white/20 flex flex-col items-center shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                <div class="text-[9px] sm:text-[10px] font-bold text-white/80 uppercase mb-2 tracking-wider">Fish</div>
+                <div class="w-3 sm:w-4 h-40 sm:h-56 bg-gray-900 rounded-full overflow-hidden relative border border-gray-700 shadow-inner">
+                    <div id="progressBar" class="absolute bottom-0 left-0 w-full bg-blue-400 transition-all duration-100 rounded-full" style="height: 10%;"></div>
+                </div>
+                <div class="text-[9px] sm:text-[10px] font-bold text-white/80 uppercase mt-2 tracking-wider">Boat</div>
+            </div>
+
+            <div class="bg-black/60 backdrop-blur-md rounded-2xl p-2 sm:p-3 border border-white/20 flex flex-col items-center shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                <div class="text-[9px] sm:text-[10px] font-bold text-red-400 uppercase mb-2 tracking-wider">Snap</div>
+                <div class="w-3 sm:w-4 h-40 sm:h-56 bg-gray-900 rounded-full overflow-hidden relative border border-gray-700 shadow-inner">
+                    <div id="tensionBar" class="absolute bottom-0 left-0 w-full tension-gradient-vertical transition-all duration-100 rounded-full" style="height: 0%;"></div>
+                </div>
+                <div class="text-[9px] sm:text-[10px] font-bold text-green-400 uppercase mt-2 tracking-wider">Safe</div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const actionPrompt = document.getElementById('actionPrompt');
+    const fishingUI = document.getElementById('fishingUI');
+    const tensionBar = document.getElementById('tensionBar');
+    const progressBar = document.getElementById('progressBar');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const mapUI = document.getElementById('mapUI');
+    const openMapBtn = document.getElementById('openMapBtn');
+    const closeMapBtn = document.getElementById('closeMapBtn');
+    const scorePanel = document.getElementById('scorePanel');
+    const locationTitle = document.getElementById('locationTitle');
+    const mapFeedback = document.getElementById('mapFeedback');
+
+    const STATE = { IDLE: 0, CASTING: 1, WAITING: 2, BITE: 3, REELING: 4, RESULT: 5, MAP: 6 };
+
+    let currentState = STATE.IDLE;
+    let score = 0, boatX = 0, boatY = 0, time = 0;
+    let bobber = { x: 0, y: 0, targetX: 0, targetY: 0, active: false, dipOffset: 0 };
+    let castPower = 0, castDirection = 1;
+    let fishDistance = 100, lineTension = 0, currentFish = null;
+    let isReeling = false, waitTimer = 0, biteTimer = 0, hasCastOnce = false;
+    let particles = [], ripples = [], ambientParticles = [], jumpingFish = [], clouds = [], mountainsL1 = [], mountainsL2 = [], foregroundElements = [];
+    let currentEnv = {};
+
+    let keys = { w: false, a: false, s: false, d: false };
+    const boatSpeed = 3.5;
+
+    // --- LORE UPDATED FISH DATABASE ---
+    const fishTypes = [
+        { id: 'can', name: "Rust-Clogged Filter", difficulty: "Easy", color: "#9ca3af", pullSpeed: 0.1, tensionRate: 1.2, struggleChance: 0.005, struggleMultiplier: 5, score: 10 },
+        { id: 'perch', name: "Dusk Perch", difficulty: "Easy", color: "#fbbf24", pullSpeed: 0.15, tensionRate: 1.5, struggleChance: 0.01, struggleMultiplier: 8, score: 25 },
+        { id: 'trout', name: "Signal Trout", difficulty: "Medium", color: "#60a5fa", pullSpeed: 0.25, tensionRate: 2.0, struggleChance: 0.02, struggleMultiplier: 10, score: 50 },
+        { id: 'eel', name: "Hexed Eel", difficulty: "Hard", color: "#a855f7", pullSpeed: 0.4, tensionRate: 2.8, struggleChance: 0.035, struggleMultiplier: 15, score: 100 },
+        { id: 'grouper', name: "Pale-Eyed Grouper", difficulty: "Hard", color: "#cbd5e1", pullSpeed: 0.45, tensionRate: 3.2, struggleChance: 0.04, struggleMultiplier: 18, score: 150 },
+        { id: 'lurker', name: "The Deep Lurker", difficulty: "Legendary", color: "#111827", pullSpeed: 0.5, tensionRate: 3.5, struggleChance: 0.05, struggleMultiplier: 20, score: 300 }
+    ];
+
+    // --- BIOMES ---
+    const BIOMES = {
+        LAND: { id: 'land', isWater: false, color: '#4d7c0f' },
+        FOREST: { id: 'forest', isWater: false, color: '#166534' },
+        SAND: { id: 'sand', isWater: false, color: '#854d0e' }, // Earthy coast color
+
+        SHALLOWS: {
+            id: 'shallows', name: 'Sunlit Shallows', isWater: true, color: '#0284c7', titleColor: '#bae6fd',
+            skyTop: [14, 165, 233], skyBot: [240, 249, 255], waterColor: [59, 130, 246], fog: 0, foregroundType: 'reeds',
+            fishSpawns: [{id: 'can', weight: 40}, {id: 'perch', weight: 60}]
+        },
+        KELP: {
+            id: 'kelp', name: 'Whispering Kelp', isWater: true, color: '#0f766e', titleColor: '#5eead4',
+            skyTop: [20, 83, 45], skyBot: [204, 251, 241], waterColor: [20, 83, 45], fog: 0.05, foregroundType: 'reeds',
+            fishSpawns: [{id: 'perch', weight: 30}, {id: 'trout', weight: 50}, {id: 'grouper', weight: 20}]
+        },
+        PIER: {
+            id: 'pier', name: 'The Old Pier', isWater: true, color: '#475569', titleColor: '#cbd5e1',
+            skyTop: [71, 85, 105], skyBot: [203, 213, 225], waterColor: [71, 85, 105], fog: 0.15, foregroundType: 'pylons',
+            fishSpawns: [{id: 'can', weight: 50}, {id: 'trout', weight: 50}]
+        },
+        BAYOU: {
+            id: 'bayou', name: "Drifter's Bayou", isWater: true, color: '#064e3b', titleColor: '#6ee7b7',
+            skyTop: [88, 28, 135], skyBot: [16, 185, 129], waterColor: [15, 45, 35], fog: 0.2, foregroundType: 'deadtrees',
+            fishSpawns: [{id: 'can', weight: 20}, {id: 'trout', weight: 20}, {id: 'eel', weight: 60}]
+        },
+        DEEP: {
+            id: 'deep', name: 'Archive Deep', isWater: true, color: '#1e3a8a', titleColor: '#60a5fa',
+            skyTop: [2, 6, 23], skyBot: [30, 58, 138], waterColor: [10, 20, 60], fog: 0.35, foregroundType: 'none',
+            fishSpawns: [{id: 'trout', weight: 20}, {id: 'grouper', weight: 40}, {id: 'lurker', weight: 40}]
+        },
+        HEXED: {
+            id: 'hexed', name: 'Hexed Waters', isWater: true, color: '#7f1d1d', titleColor: '#fca5a5',
+            skyTop: [69, 10, 10], skyBot: [253, 164, 175], waterColor: [40, 20, 50], fog: 0.35, foregroundType: 'deadtrees_red',
+            fishSpawns: [{id: 'eel', weight: 50}, {id: 'grouper', weight: 30}, {id: 'lurker', weight: 20}]
+        }
+    };
+    let currentLocation = BIOMES.SHALLOWS;
+
+    let mapPlayerPos = { x: 0, y: 0 };
+    const mapRes = 5;
+    let mapData = [];
+    let mapDecorations = [];
+    let mapClouds = [];
+    let offscreenMapCanvas = document.createElement('canvas');
+    let offCtx = offscreenMapCanvas.getContext('2d');
+
+    let seedOffset = 0;
+
+    // Stable math hash so it doesn't break at high offsets
+    function hash(x, y) {
+        let h = Math.sin(x * 12.9898 + y * 78.233 + seedOffset) * 43758.5453123;
+        return h - Math.floor(h);
+    }
+
+    function vnoise(x, y) {
+        let i = Math.floor(x), j = Math.floor(y);
+        let f_x = x - i, f_y = y - j;
+        let u = f_x * f_x * (3.0 - 2.0 * f_x), v = f_y * f_y * (3.0 - 2.0 * f_y);
+        let a = hash(i, j), b = hash(i + 1, j), c = hash(i, j + 1), d = hash(i + 1, j + 1);
+        return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+    }
+
+    function fbm(x, y) {
+        return (vnoise(x, y)*0.5 + vnoise(x*2.0, y*2.0)*0.25 + vnoise(x*4.0, y*4.0)*0.125) / 0.875;
+    }
+
+    function generateMapClouds(cw, ch) {
+        mapClouds = [];
+        for(let i=0; i<8; i++) {
+            mapClouds.push({
+                x: Math.random() * cw, y: Math.random() * ch,
+                scale: 0.3 + Math.random() * 0.8, speed: 0.05 + Math.random() * 0.1,
+                opacity: 0.1 + Math.random() * 0.15
+            });
+        }
+    }
+
+    function buildProceduralMap() {
+        let cw = canvas.width;
+        let ch = canvas.height;
+        offscreenMapCanvas.width = cw;
+        offscreenMapCanvas.height = ch;
+
+        let cols = Math.ceil(cw / mapRes);
+        let rows = Math.ceil(ch / mapRes);
+        mapData = Array(cols).fill().map(()=>Array(rows).fill('LAND'));
+        mapDecorations = [];
+        generateMapClouds(cw, ch);
+
+        seedOffset = Math.random() * 10000; // New map seed every load
+
+        for(let i=0; i<cols; i++) {
+            for(let j=0; j<rows; j++) {
+                let nx = i / cols;
+                let ny = j / rows;
+
+                // Distance from center (0 = center, ~0.7 = corners)
+                let dx = nx - 0.5;
+                let dy = ny - 0.5;
+                let distToCenter = Math.hypot(dx, dy);
+                let normDist = Math.min(1.0, distToCenter * 2.0); // 0 at center, 1 at edges
+
+                let noiseBase = fbm(nx * 3, ny * 3);
+
+                // Create a Bowl: elevation is low in middle, high at edges
+                let el = noiseBase * 0.4 + Math.pow(normDist, 2.5) * 0.8;
+
+                let biomeKey = 'SHALLOWS';
+
+                if (el > 0.65) {
+                    biomeKey = (fbm(nx * 5, ny * 5) > 0.5) ? 'FOREST' : 'LAND';
+                } else if (el > 0.55) {
+                    biomeKey = 'SAND';
+                } else {
+                    // It's water! Let's paint the organic biomes based on anchors
+                    let zoneNoise = fbm(nx * 4 + 10, ny * 4 + 10) * 0.35;
+
+                    let dBayou = Math.hypot(nx - 0.8, ny - 0.2); // Top Right
+                    let dPier  = Math.hypot(nx - 0.2, ny - 0.8); // Bottom Left
+                    let dHexed = Math.hypot(nx - 0.35, ny - 0.35); // Top Left-ish
+                    let dDeep  = Math.hypot(nx - 0.5, ny - 0.5); // Center
+
+                    if (dBayou - zoneNoise < 0.2) biomeKey = 'BAYOU';
+                    else if (dPier - zoneNoise < 0.2) biomeKey = 'PIER';
+                    else if (dHexed - zoneNoise < 0.1) biomeKey = 'HEXED';
+                    else if (dDeep - zoneNoise < 0.2) biomeKey = 'DEEP';
+                    else if (fbm(nx * 6 + 20, ny * 6 + 20) > 0.6) biomeKey = 'KELP';
+                    else biomeKey = 'SHALLOWS';
+                }
+
+                mapData[i][j] = biomeKey;
+            }
+        }
+
+        // Render Map to Offscreen Canvas
+        for(let i=0; i<cols; i++) {
+            for(let j=0; j<rows; j++) {
+                let biomeKey = mapData[i][j];
+                let b = BIOMES[biomeKey];
+
+                // Add texture to the map colors
+                let rTex = Math.random();
+                if (b.isWater) {
+                    offCtx.fillStyle = b.color;
+                    offCtx.globalAlpha = 0.95 + rTex * 0.05;
+                } else {
+                    offCtx.fillStyle = b.color;
+                    offCtx.globalAlpha = 0.85 + rTex * 0.15;
+                }
+
+                offCtx.fillRect(i*mapRes, j*mapRes, mapRes, mapRes);
+                offCtx.globalAlpha = 1.0;
+
+                // Procedural Decorations
+                let px = i * mapRes;
+                let py = j * mapRes;
+
+                if (biomeKey === 'FOREST' && rTex < 0.3) {
+                    mapDecorations.push({ type: 'pine', x: px, y: py, size: 6 + Math.random()*8 });
+                } else if (biomeKey === 'LAND' && rTex < 0.05) {
+                    mapDecorations.push({ type: 'tree', x: px, y: py, size: 5 + Math.random()*5 });
+                } else if (biomeKey === 'SAND' && rTex < 0.05) {
+                    mapDecorations.push({ type: 'rock', x: px, y: py, size: 2 + Math.random()*3 });
+                } else if (biomeKey === 'SHALLOWS' && rTex < 0.02) {
+                    mapDecorations.push({ type: 'lily', x: px, y: py, size: 3 + Math.random()*2 });
+                } else if (biomeKey === 'KELP' && rTex < 0.08) {
+                    mapDecorations.push({ type: 'kelp', x: px, y: py, size: 4 + Math.random()*4 });
+                } else if (biomeKey === 'BAYOU' && rTex < 0.04) {
+                    mapDecorations.push({ type: 'deadtree', x: px, y: py, size: 8 + Math.random()*6 });
+                } else if (biomeKey === 'HEXED' && rTex < 0.06) {
+                    mapDecorations.push({ type: 'redtree', x: px, y: py, size: 8 + Math.random()*8 });
+                } else if (biomeKey === 'PIER' && rTex < 0.01) {
+                    mapDecorations.push({ type: 'dock', x: px, y: py });
+                }
+            }
+        }
+
+        // Coastline Drop Shadow
+        offCtx.fillStyle = 'rgba(0,0,0,0.3)';
+        for(let i=1; i<cols-1; i++) {
+            for(let j=1; j<rows-1; j++) {
+                if (BIOMES[mapData[i][j]].isWater && !BIOMES[mapData[i][j-1]].isWater) {
+                    offCtx.fillRect(i*mapRes, j*mapRes, mapRes, 4);
+                }
+            }
+        }
+    }
+
+    function jitterColor(rgb, amount=15) {
+        return rgb.map(c => Math.max(0, Math.min(255, c + (Math.random() * amount * 2 - amount))));
+    }
+    function rgbStr(rgb) { return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`; }
+    function rgbaStr(rgb, a) { return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${a})`; }
+
+    function generateEnvironment() {
+        currentEnv = {
+            skyTop: rgbStr(jitterColor(currentLocation.skyTop, 20)),
+            skyBot: rgbStr(jitterColor(currentLocation.skyBot, 10)),
+            water: currentLocation.waterColor,
+            fog: currentLocation.fog + (Math.random() * 0.1 - 0.05),
+            waveColors: [
+                rgbaStr(jitterColor(currentLocation.waterColor, 15), 0.6),
+                rgbaStr(jitterColor(currentLocation.waterColor, 30), 0.6),
+                rgbaStr(jitterColor(currentLocation.waterColor, 50), 0.6)
+            ]
+        };
+
+        clouds = [];
+        let cloudCount = (currentLocation.id === 'deep' || currentLocation.id === 'hexed') ? 2 : (4 + Math.random() * 4);
+        for(let i=0; i<cloudCount; i++) {
+            clouds.push({
+                x: Math.random() * canvas.width, y: Math.random() * canvas.height * 0.4,
+                scale: 0.5 + Math.random() * 1.5, speed: 0.05 + Math.random() * 0.15,
+                opacity: (currentLocation.id === 'bayou' || currentLocation.id === 'hexed') ? 0.3 : 0.8
+            });
+        }
+
+        mountainsL1 = []; mountainsL2 = [];
+        let step = 30;
+        let h1 = canvas.height * 0.45;
+        for(let x=0; x<=canvas.width + step; x+=step) {
+            h1 += (Math.random() - 0.5) * 40; h1 = Math.max(canvas.height * 0.35, Math.min(canvas.height * 0.55, h1));
+            mountainsL1.push({x: x, y: h1});
+        }
+        let h2 = canvas.height * 0.55;
+        for(let x=0; x<=canvas.width + step; x+=step) {
+            h2 += (Math.random() - 0.5) * 50; h2 = Math.max(canvas.height * 0.45, Math.min(canvas.height * 0.65, h2));
+            mountainsL2.push({x: x, y: h2});
+        }
+
+        foregroundElements = [];
+        if (currentLocation.foregroundType === 'reeds') {
+            for(let i=0; i<25; i++) {
+                let isLeft = Math.random() > 0.5;
+                foregroundElements.push({
+                    type: 'reed', x: isLeft ? Math.random() * (canvas.width * 0.25) : canvas.width - Math.random() * (canvas.width * 0.25),
+                    height: 50 + Math.random() * 120, swaySpeed: 1 + Math.random() * 2, offset: Math.random() * Math.PI * 2
+                });
+            }
+        } else if (currentLocation.foregroundType === 'pylons') {
+            for(let i=0; i<6; i++) {
+                foregroundElements.push({
+                    type: 'pylon', x: (canvas.width * 0.05) + (i * 80) + (Math.random() * 30),
+                    height: 100 + Math.random() * 200, tilt: (Math.random() - 0.5) * 0.2, width: 20 + Math.random() * 15
+                });
+            }
+        } else if (currentLocation.foregroundType.includes('deadtrees')) {
+            for(let i=0; i<4; i++) {
+                foregroundElements.push({
+                    type: 'tree', isRed: currentLocation.foregroundType === 'deadtrees_red',
+                    x: i % 2 === 0 ? Math.random() * 100 : canvas.width - Math.random() * 100,
+                    scale: 0.8 + Math.random() * 0.5, flip: i % 2 !== 0
+                });
+            }
+        }
+
+        locationTitle.innerText = currentLocation.name;
+        locationTitle.style.color = currentLocation.titleColor;
+        scorePanel.style.borderColor = currentLocation.titleColor;
+    }
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        if (boatX === 0 && boatY === 0) {
+            boatX = canvas.width * 0.45;
+            boatY = canvas.height * 0.75;
+        } else {
+            boatX = Math.min(Math.max(boatX, 70), canvas.width - 70);
+            boatY = Math.min(Math.max(boatY, canvas.height * 0.65 + 10), canvas.height - 30);
+        }
+
+        buildProceduralMap();
+
+        // Find a valid water tile for initial spawn
+        if(mapPlayerPos.x === 0) {
+            let found = false;
+            let cx = Math.floor(mapData.length/2);
+            let cy = Math.floor(mapData[0].length/2);
+
+            // Spiral search out from center to find water
+            for (let r = 0; r < 20 && !found; r++) {
+                for (let i = cx - r; i <= cx + r && !found; i++) {
+                    for (let j = cy - r; j <= cy + r && !found; j++) {
+                        if (i>=0 && i<mapData.length && j>=0 && j<mapData[0].length) {
+                            if (BIOMES[mapData[i][j]].isWater) {
+                                mapPlayerPos.x = i * mapRes;
+                                mapPlayerPos.y = j * mapRes;
+                                currentLocation = BIOMES[mapData[i][j]];
+                                found = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if(currentState !== STATE.MAP) generateEnvironment();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    window.addEventListener('keydown', (e) => {
+        if(currentState === STATE.MAP) return;
+        if(e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') keys.w = true;
+        if(e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.a = true;
+        if(e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') keys.s = true;
+        if(e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.d = true;
+    });
+    window.addEventListener('keyup', (e) => {
+        if(e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') keys.w = false;
+        if(e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.a = false;
+        if(e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') keys.s = false;
+        if(e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.d = false;
+    });
+
+    openMapBtn.addEventListener('click', () => {
+        if(currentState !== STATE.REELING && currentState !== STATE.BITE) {
+            currentState = STATE.MAP;
+            bobber.active = false;
+            hidePrompt();
+
+            mapUI.classList.remove('opacity-0');
+            openMapBtn.style.display = 'none';
+            scorePanel.style.display = 'none';
+            keys = { w: false, a: false, s: false, d: false };
+        }
+    });
+
+    closeMapBtn.addEventListener('click', () => {
+        currentState = STATE.IDLE;
+        mapUI.classList.add('opacity-0');
+        openMapBtn.style.display = 'flex';
+        scorePanel.style.display = 'block';
+    });
+
+    function handlePointerDown(e) {
+        if(currentState === STATE.MAP) {
+            if(e.target === closeMapBtn || (e.target.closest && e.target.closest('#closeMapBtn'))) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            let bx = Math.floor(mouseX / mapRes);
+            let by = Math.floor(mouseY / mapRes);
+
+            if (bx >= 0 && bx < mapData.length && by >= 0 && by < mapData[0].length) {
+                let clickedBiome = BIOMES[mapData[bx][by]];
+
+                if (!clickedBiome.isWater) {
+                    // Flash warning UI
+                    mapFeedback.innerText = "Land! Click on the water.";
+                    mapFeedback.style.left = `${mouseX - (window.innerWidth < 600 ? 70 : 100)}px`;
+                    mapFeedback.style.top = `${mouseY - 40}px`;
+
+                    // Reset animation
+                    mapFeedback.classList.remove('map-warning');
+                    void mapFeedback.offsetWidth;
+                    mapFeedback.classList.add('map-warning');
+                } else {
+                    mapPlayerPos.x = mouseX;
+                    mapPlayerPos.y = mouseY;
+                    currentLocation = clickedBiome;
+                    generateEnvironment();
+                    closeMapBtn.click();
+                }
+            }
+            return;
+        }
+
+        if(e.target === openMapBtn || e.target === closeMapBtn) return;
+
+        switch(currentState) {
+            case STATE.IDLE:
+                currentState = STATE.CASTING; castPower = 0; bobber.active = false; hidePrompt();
+                if(!hasCastOnce) {
+                    hasCastOnce = true;
+                    const panel = document.getElementById('instructionPanel');
+                    if(panel) {
+                        panel.style.transition = "opacity 0.5s"; panel.style.opacity = "0";
+                        setTimeout(() => panel.style.display = "none", 500);
+                    }
+                }
+                break;
+            case STATE.BITE:
+                currentState = STATE.REELING; startMinigame(); showPrompt("HOOKED!", "#4ade80", 1000);
+                break;
+            case STATE.REELING:
+                isReeling = true;
+                break;
+            case STATE.RESULT:
+                currentState = STATE.IDLE; hidePrompt();
+                break;
+        }
+    }
+
+    function handlePointerUp(e) {
+        if (currentState === STATE.CASTING) {
+            currentState = STATE.WAITING; bobber.active = true; bobber.landed = false;
+            bobber.x = boatX + 40; bobber.y = boatY - 40;
+            let maxDist = canvas.width * 0.7;
+            bobber.targetX = boatX + 50 + (castPower / 100) * maxDist;
+            bobber.targetY = boatY + 10;
+            waitTimer = Math.random() * 3000 + 2000;
+        } else if (currentState === STATE.REELING) {
+            isReeling = false;
+        }
+    }
+
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    function showPrompt(text, color = "white", duration = 0, style="catch-text") {
+        actionPrompt.innerHTML = `<span class="${style}" style="color: ${color}">${text}</span>`;
+        actionPrompt.classList.remove('hidden');
+        if (duration > 0) setTimeout(hidePrompt, duration);
+    }
+    function hidePrompt() { actionPrompt.classList.add('hidden'); }
+
+
+    function spawnRipple(x, y, color = 'rgba(255,255,255,0.4)') {
+        ripples.push({ x: x, y: y, radius: 0, life: 1.0, color: color });
+    }
+
+    function spawnParticles(x, y, count, color) {
+        for(let i=0; i<count; i++) particles.push({ x: x, y: y, vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 1) * 5, life: 1.0, color: color });
+    }
+    function updateParticles() {
+        for(let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i]; p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life -= 0.02;
+            if(p.life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    function drawRipples() {
+        ripples.forEach(r => {
+            ctx.strokeStyle = r.color; ctx.globalAlpha = r.life; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.ellipse(r.x, r.y, r.radius, r.radius * 0.3, 0, 0, Math.PI*2); ctx.stroke();
+        });
+        ctx.globalAlpha = 1.0;
+    }
+
+
+    function drawAmbient() {
+        ambientParticles.forEach(p => {
+            ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 1.5, 0, Math.PI*2); ctx.fill();
+        });
+        ctx.globalAlpha = 1.0;
+
+        jumpingFish.forEach(f => {
+            ctx.fillStyle = f.color;
+            ctx.save();
+            ctx.translate(f.x, f.y);
+            ctx.rotate(Math.atan2(f.vy, f.vx));
+            ctx.beginPath(); ctx.ellipse(0, 0, 6, 2.5, 0, 0, Math.PI*2); ctx.fill();
+            // Tail
+            ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(-9, -3); ctx.lineTo(-9, 3); ctx.fill();
+            ctx.restore();
+        });
+    }
+
+    function drawParticles() {
+        particles.forEach(p => {
+            ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
+        });
+    }
+
+    function selectFish() {
+        let totalWeight = currentLocation.fishSpawns.reduce((sum, spawn) => sum + spawn.weight, 0);
+        let rand = Math.random() * totalWeight;
+        let currentWeight = 0, selectedId = 'can';
+        for (let spawn of currentLocation.fishSpawns) {
+            currentWeight += spawn.weight;
+            if (rand <= currentWeight) { selectedId = spawn.id; break; }
+        }
+        return fishTypes.find(f => f.id === selectedId);
+    }
+
+    function startMinigame() {
+        currentFish = selectFish();
+        fishDistance = Math.max(15, castPower);
+        lineTension = 20; isReeling = true;
+        fishingUI.classList.remove('translate-x-full', 'opacity-0');
+        spawnParticles(bobber.x, bobber.y, 20, '#ffffff');
+    }
+
+    function endMinigame(success) {
+        currentState = STATE.RESULT;
+        fishingUI.classList.add('translate-x-full', 'opacity-0');
+        bobber.active = false;
+
+        if (success) {
+            score += currentFish.score; scoreDisplay.innerText = score;
+            showPrompt(`CAUGHT:<br><span style="font-size:0.6em; color:${currentFish.color}">${currentFish.name}</span><br><span style="font-size:0.4em">+${currentFish.score} PTS</span>`, "#4ade80");
+            spawnParticles(bobber.x, bobber.y, 60, currentFish.color); spawnRipple(bobber.x, bobber.y);
+        } else {
+            if (lineTension >= 100) showPrompt("LINE SNAPPED!", "#ef4444");
+            else showPrompt("GOT AWAY!", "#9ca3af");
+            spawnParticles(bobber.x, bobber.y, 10, '#ffffff');
+        }
+    }
+
+    function updatePhysics(deltaTime) {
+        time += deltaTime * 0.001;
+        updateParticles();
+        // Spawn ambient particles
+        if (Math.random() < 0.05) {
+            ambientParticles.push({
+                x: Math.random() * canvas.width,
+                y: (Math.random() * (canvas.height * 0.65)),
+                vx: (Math.random() - 0.5) * 0.5,
+                vy: (Math.random() - 0.5) * 0.5,
+                life: 1.0,
+                color: currentLocation.id === 'bayou' ? 'rgba(167, 243, 208, 0.8)' : 'rgba(255, 255, 255, 0.5)'
+            });
+        }
+
+        // Spawn jumping fish
+        if (Math.random() < 0.002) {
+            let jx = Math.random() * canvas.width;
+            let jy = canvas.height * 0.65 + Math.random() * (canvas.height * 0.35);
+            jumpingFish.push({
+                x: jx, y: jy, startY: jy,
+                vx: (Math.random() - 0.5) * 2,
+                vy: -3 - Math.random() * 2,
+                color: Math.random() > 0.5 ? '#9ca3af' : '#60a5fa'
+            });
+            spawnRipple(jx, jy);
+        }
+
+        for(let i = ambientParticles.length - 1; i >= 0; i--) {
+            let p = ambientParticles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.005;
+            if(p.life <= 0) ambientParticles.splice(i, 1);
+        }
+        for(let i = jumpingFish.length - 1; i >= 0; i--) {
+            let f = jumpingFish[i]; f.x += f.vx; f.y += f.vy; f.vy += 0.15; // Gravity
+            if(f.y > f.startY) {
+                spawnRipple(f.x, f.startY);
+                jumpingFish.splice(i, 1);
+            }
+        }
+
+        for(let i = ripples.length - 1; i >= 0; i--) {
+            let r = ripples[i]; r.radius += 1.5; r.life -= 0.02;
+            if(r.life <= 0) ripples.splice(i, 1);
+        }
+
+
+        if (currentState !== STATE.MAP) {
+            if (keys.w && boatY > canvas.height * 0.65 + 10) { boatY -= boatSpeed; if (Math.random() < 0.1) spawnRipple(boatX, boatY + 25); }
+            if (keys.s && boatY < canvas.height - 30) { boatY += boatSpeed; if (Math.random() < 0.1) spawnRipple(boatX, boatY - 5); }
+            if (keys.a && boatX > 70) { boatX -= boatSpeed; if (Math.random() < 0.1) spawnRipple(boatX + 50, boatY + 25); }
+            if (keys.d && boatX < canvas.width - 70) { boatX += boatSpeed; if (Math.random() < 0.1) spawnRipple(boatX - 50, boatY + 25); }
+        }
+
+        if (currentState === STATE.CASTING) {
+            castPower += 1.5 * castDirection;
+            if (castPower >= 100 || castPower <= 0) castDirection *= -1;
+        }
+
+        if (bobber.active) {
+            if (currentState === STATE.WAITING && Math.abs(bobber.x - bobber.targetX) > 1) {
+                bobber.x += (bobber.targetX - bobber.x) * 0.1; bobber.y += (bobber.targetY - bobber.y) * 0.1;
+            } else {
+                bobber.dipOffset = Math.sin(time * 3) * 3;
+            }
+        }
+
+        if (currentState === STATE.WAITING && Math.abs(bobber.x - bobber.targetX) <= 1) {
+            waitTimer -= deltaTime;
+            if (waitTimer <= 0) {
+                currentState = STATE.BITE; biteTimer = 2500;
+                spawnParticles(bobber.x, bobber.y, 10, '#ffffff');
+                showPrompt("!", "#ef4444", 0, "exclamation");
+                actionPrompt.style.transform = `translate(${bobber.x - canvas.width/2}px, ${bobber.y - canvas.height/2 - 60}px)`;
+            }
+        }
+
+        if (currentState === STATE.BITE) {
+            biteTimer -= deltaTime; bobber.dipOffset = (Math.random() * 10) + 5; if (Math.random() < 0.3) spawnRipple(bobber.x, bobber.y);
+            if (biteTimer <= 0) {
+                currentState = STATE.RESULT; hidePrompt(); showPrompt("TOO SLOW...", "#9ca3af");
+                bobber.active = false; actionPrompt.style.transform = `translate(0px, 0px)`;
+            }
+        }
+
+        if (currentState === STATE.REELING) {
+            actionPrompt.style.transform = `translate(0px, 0px)`;
+
+            if (isReeling) { fishDistance -= 0.5; lineTension += currentFish.tensionRate * 0.6; if (Math.random() < 0.2) spawnRipple(bobber.x, bobber.y); }
+            else { fishDistance += currentFish.pullSpeed * 0.7; lineTension -= 2.5; }
+
+            if (Math.random() < currentFish.struggleChance * 0.7) {
+                lineTension += currentFish.pullSpeed * currentFish.struggleMultiplier * 0.7;
+                spawnParticles(bobber.x, bobber.y, 6, '#ffffff');
+            }
+
+            lineTension = Math.max(0, Math.min(100, lineTension));
+            fishDistance = Math.max(0, Math.min(100, fishDistance));
+
+            let maxPixelDist = canvas.width * 0.7;
+            bobber.x = boatX + 50 + (fishDistance / 100) * maxPixelDist;
+
+            tensionBar.style.height = `${lineTension}%`;
+            progressBar.style.height = `${100 - fishDistance}%`;
+
+            if (lineTension >= 100) endMinigame(false);
+            else if (fishDistance >= 100) endMinigame(false);
+            else if (fishDistance <= 0) endMinigame(true);
+        }
+    }
+
+    // --- RENDERING ---
+
+    function drawMapDecorations() {
+        mapDecorations.forEach(dec => {
+            ctx.save();
+            ctx.translate(dec.x, dec.y);
+
+            if (dec.type === 'pine') {
+                ctx.fillStyle = '#064e3b';
+                ctx.beginPath(); ctx.moveTo(0, -dec.size); ctx.lineTo(dec.size*0.8, dec.size); ctx.lineTo(-dec.size*0.8, dec.size); ctx.fill();
+                ctx.fillStyle = '#047857';
+                ctx.beginPath(); ctx.moveTo(0, -dec.size); ctx.lineTo(dec.size*0.8, dec.size); ctx.lineTo(0, dec.size); ctx.fill();
+            } else if (dec.type === 'tree') {
+                ctx.fillStyle = '#166534';
+                ctx.beginPath(); ctx.arc(0, 0, dec.size, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#22c55e';
+                ctx.beginPath(); ctx.arc(-1, -1, dec.size*0.7, 0, Math.PI*2); ctx.fill();
+            } else if (dec.type === 'rock') {
+                ctx.fillStyle = '#475569';
+                ctx.beginPath(); ctx.ellipse(0, 0, dec.size, dec.size*0.6, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#64748b';
+                ctx.beginPath(); ctx.ellipse(-1, -1, dec.size*0.6, dec.size*0.4, 0, 0, Math.PI*2); ctx.fill();
+            } else if (dec.type === 'lily') {
+                ctx.fillStyle = '#22c55e';
+                ctx.beginPath(); ctx.arc(0, 0, dec.size, 0, Math.PI*1.8); ctx.fill();
+            } else if (dec.type === 'kelp') {
+                ctx.fillStyle = 'rgba(20, 184, 166, 0.4)';
+                ctx.beginPath(); ctx.arc(0, 0, dec.size, 0, Math.PI*2); ctx.fill();
+            } else if (dec.type === 'deadtree') {
+                ctx.strokeStyle = '#020617'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(0, dec.size*0.5); ctx.lineTo(0, -dec.size); ctx.lineTo(dec.size*0.4, -dec.size*1.5); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, -dec.size*0.5); ctx.lineTo(-dec.size*0.5, -dec.size); ctx.stroke();
+            } else if (dec.type === 'redtree') {
+                ctx.strokeStyle = '#450a0a'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(0, dec.size*0.5); ctx.lineTo(0, -dec.size); ctx.lineTo(dec.size*0.4, -dec.size*1.5); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, -dec.size*0.5); ctx.lineTo(-dec.size*0.5, -dec.size); ctx.stroke();
+            } else if (dec.type === 'dock') {
+                ctx.fillStyle = '#451a03';
+                ctx.fillRect(-10, -5, 20, 10);
+                ctx.fillStyle = '#78350f';
+                ctx.fillRect(-10, -4, 20, 2); ctx.fillRect(-10, 0, 20, 2);
+                ctx.fillStyle = '#1c1917';
+                ctx.fillRect(-12, -7, 3, 3); ctx.fillRect(9, -7, 3, 3);
+                ctx.fillRect(-12, 4, 3, 3); ctx.fillRect(9, 4, 3, 3);
+            }
+            ctx.restore();
+        });
+    }
+
+    function drawMap() {
+        ctx.drawImage(offscreenMapCanvas, 0, 0);
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for(let i=0; i<canvas.width; i+=40) {
+            for(let j=0; j<canvas.height; j+=40) {
+                let bx = Math.floor(i / mapRes);
+                let by = Math.floor(j / mapRes);
+                if (bx < mapData.length && by < mapData[0].length && BIOMES[mapData[bx][by]].isWater) {
+                    let waveOffset = Math.sin(time * 2 + i * 0.05) * 5;
+                    ctx.moveTo(i + waveOffset, j);
+                    ctx.lineTo(i + 15 + waveOffset, j);
+                }
+            }
+        }
+        ctx.stroke();
+
+        drawMapDecorations();
+
+        // Muted, subtle map fogs
+        ctx.fillStyle = `rgba(153, 27, 27, ${0.05 + Math.sin(time)*0.02})`; // Softer hexed map fog
+        for(let i=0; i<mapData.length; i+=3) {
+            for(let j=0; j<mapData[0].length; j+=3) {
+                if (mapData[i][j] === 'HEXED') ctx.fillRect(i*mapRes, j*mapRes, mapRes*3, mapRes*3);
+                if (mapData[i][j] === 'DEEP') {
+                    ctx.fillStyle = `rgba(200, 210, 220, ${0.05 + Math.sin(time + i)*0.03})`;
+                    ctx.fillRect(i*mapRes, j*mapRes, mapRes*3, mapRes*3);
+                }
+            }
+        }
+
+        mapClouds.forEach(c => {
+            c.x += c.speed; if(c.x > canvas.width + 50) c.x = -50;
+            ctx.fillStyle = `rgba(255, 255, 255, ${c.opacity})`;
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 15 * c.scale, Math.PI * 0.5, Math.PI * 1.5);
+            ctx.arc(c.x + 10 * c.scale, c.y - 8 * c.scale, 20 * c.scale, Math.PI * 1, Math.PI * 1.85);
+            ctx.arc(c.x + 25 * c.scale, c.y - 4 * c.scale, 15 * c.scale, Math.PI * 1.37, Math.PI * 1.91);
+            ctx.arc(c.x + 35 * c.scale, c.y, 10 * c.scale, Math.PI * 1.5, Math.PI * 0.5);
+            ctx.moveTo(c.x + 35 * c.scale, c.y + 10 * c.scale); ctx.lineTo(c.x, c.y + 15 * c.scale); ctx.fill();
+        });
+
+        let px = mapPlayerPos.x, py = mapPlayerPos.y;
+        let pinY = py + Math.sin(time * 5) * 4;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath(); ctx.ellipse(px, py + 8, 8, 4, 0, 0, Math.PI*2); ctx.fill();
+
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath(); ctx.moveTo(px, pinY + 5); ctx.lineTo(px - 10, pinY - 15);
+        ctx.arc(px, pinY - 15, 10, Math.PI, 0); ctx.lineTo(px, pinY + 5); ctx.fill();
+
+        ctx.fillStyle = '#fee2e2';
+        ctx.beginPath(); ctx.arc(px, pinY - 15, 4, 0, Math.PI*2); ctx.fill();
+    }
+
+    function drawEnvironment() {
+        let skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+        skyGrad.addColorStop(0, currentEnv.skyTop); skyGrad.addColorStop(1, currentEnv.skyBot);
+        ctx.fillStyle = skyGrad; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if(currentLocation.id === 'shallows' || currentLocation.id === 'kelp') {
+            ctx.fillStyle = currentLocation.id === 'kelp' ? 'rgba(253, 230, 138, 0.5)' : '#fef08a';
+            ctx.beginPath(); ctx.arc(canvas.width * 0.8, canvas.height * 0.25, 40, 0, Math.PI * 2); ctx.fill();
+        } else if (currentLocation.id === 'deep' || currentLocation.id === 'bayou') {
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.beginPath(); ctx.arc(canvas.width * 0.2, canvas.height * 0.2, 30, 0, Math.PI * 2); ctx.fill();
+        } else if (currentLocation.id === 'hexed') {
+            ctx.fillStyle = '#fca5a5';
+            ctx.beginPath(); ctx.arc(canvas.width * 0.3, canvas.height * 0.3, 50, 0, Math.PI * 2); ctx.fill();
+        }
+
+        clouds.forEach(c => {
+            c.x += c.speed; if(c.x > canvas.width + 100) c.x = -100;
+            ctx.fillStyle = `rgba(255, 255, 255, ${c.opacity})`;
+            if (currentLocation.id === 'hexed') ctx.fillStyle = `rgba(153, 27, 27, ${c.opacity + 0.2})`;
+            ctx.beginPath(); ctx.arc(c.x, c.y, 20 * c.scale, Math.PI * 0.5, Math.PI * 1.5);
+            ctx.arc(c.x + 15 * c.scale, c.y - 10 * c.scale, 25 * c.scale, Math.PI * 1, Math.PI * 1.85);
+            ctx.arc(c.x + 35 * c.scale, c.y - 5 * c.scale, 20 * c.scale, Math.PI * 1.37, Math.PI * 1.91);
+            ctx.arc(c.x + 50 * c.scale, c.y, 15 * c.scale, Math.PI * 1.5, Math.PI * 0.5);
+            ctx.moveTo(c.x + 50 * c.scale, c.y + 15 * c.scale); ctx.lineTo(c.x, c.y + 20 * c.scale); ctx.fill();
+        });
+
+        let m1Color = currentLocation.id === 'bayou' ? '#3b0764' : (currentLocation.id === 'deep' ? '#020617' : (currentLocation.id === 'hexed' ? '#450a0a' : '#94a3b8'));
+        if (currentLocation.id === 'kelp') m1Color = '#134e4a';
+        ctx.fillStyle = m1Color; ctx.beginPath(); ctx.moveTo(0, canvas.height);
+        mountainsL1.forEach(pt => ctx.lineTo(pt.x, pt.y)); ctx.lineTo(canvas.width, canvas.height); ctx.fill();
+
+        // Toned down in-game fogs
+        if (currentEnv.fog > 0.1) {
+            let fogAlpha = Math.sin(time) * 0.05 + currentEnv.fog * 0.5;
+            let fogColor = currentLocation.id === 'hexed' ? 'rgba(153, 27, 27,' : 'rgba(200, 210, 220,';
+            ctx.fillStyle = `${fogColor} ${fogAlpha})`;
+            ctx.fillRect(0, canvas.height * 0.4, canvas.width, canvas.height * 0.6);
+        }
+
+        let m2Color = currentLocation.id === 'bayou' ? '#064e3b' : (currentLocation.id === 'deep' ? '#0f172a' : (currentLocation.id === 'hexed' ? '#7f1d1d' : '#475569'));
+        if (currentLocation.id === 'shallows') m2Color = '#4ade80';
+        if (currentLocation.id === 'kelp') m2Color = '#0f766e';
+        ctx.fillStyle = m2Color; ctx.beginPath(); ctx.moveTo(0, canvas.height);
+        mountainsL2.forEach(pt => ctx.lineTo(pt.x, pt.y)); ctx.lineTo(canvas.width, canvas.height); ctx.fill();
+
+        let waterBase = canvas.height * 0.65;
+        ctx.fillStyle = rgbStr(currentEnv.water); ctx.fillRect(0, waterBase, canvas.width, canvas.height - waterBase);
+
+        const waveColors = currentEnv.waveColors;
+        for(let j=0; j<3; j++) {
+            ctx.fillStyle = waveColors[j]; ctx.beginPath(); ctx.moveTo(0, canvas.height);
+            let layerY = waterBase + (j * ((canvas.height - waterBase) / 4));
+            for(let i=0; i<=canvas.width; i+=20) {
+                let wave1 = Math.sin((time * (1.5 + j*0.2)) + (i * 0.01)) * (8 + j*4);
+                let wave2 = Math.cos((time * 0.8) - (i * 0.02)) * 5;
+                ctx.lineTo(i, layerY + wave1 + wave2);
+            }
+            ctx.lineTo(canvas.width, canvas.height); ctx.fill();
+        }
+    }
+
+    function drawFishermanAndBoat() {
+        let localBob = Math.sin(time * 2) * 2;
+        let bY = boatY + localBob;
+
+        ctx.fillStyle = '#451a03';
+        ctx.beginPath(); ctx.moveTo(boatX - 70, bY - 5); ctx.lineTo(boatX + 70, bY - 5);
+        ctx.lineTo(boatX + 45, bY + 25); ctx.lineTo(boatX - 50, bY + 25); ctx.fill();
+
+        ctx.fillStyle = '#78350f'; ctx.fillRect(boatX - 68, bY - 5, 136, 6);
+
+        ctx.fillStyle = '#1f2937'; ctx.fillRect(boatX - 60, bY - 20, 6, 15);
+        ctx.fillStyle = currentLocation.id === 'deep' ? '#38bdf8' : (currentLocation.id === 'hexed' ? '#ef4444' : '#fbbf24');
+        ctx.fillRect(boatX - 63, bY - 25, 12, 12);
+
+        ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.arc(boatX - 57, bY - 19, 40, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
+        ctx.fillStyle = '#111827'; ctx.beginPath(); ctx.arc(boatX - 57, bY - 25, 6, Math.PI, 0); ctx.fill();
+
+        ctx.save(); ctx.translate(boatX, bY - 10);
+        ctx.fillStyle = '#1e293b'; ctx.fillRect(-15, 0, 25, 15);
+        ctx.fillStyle = '#eab308'; ctx.beginPath(); ctx.moveTo(-20, -25); ctx.lineTo(15, -20); ctx.lineTo(20, 10); ctx.lineTo(-22, 10); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(15, -20); ctx.lineTo(20, 10); ctx.lineTo(5, 10); ctx.fill();
+        ctx.fillStyle = '#ca8a04'; ctx.beginPath(); ctx.arc(-2, -28, 12, Math.PI, 0); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-2, -26, 22, 5, 0, 0, Math.PI*2); ctx.fill();
+
+        ctx.strokeStyle = '#eab308'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-5, -15);
+        let armOffset = isReeling ? 12 : 0; ctx.lineTo(25 - armOffset, -5 + armOffset); ctx.stroke();
+        ctx.fillStyle = '#fca5a5'; ctx.beginPath(); ctx.arc(25 - armOffset, -5 + armOffset, 4, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(boatX + 15, bY - 15);
+        let rodTipX = boatX + 80, rodTipY = bY - 90, controlY = bY - 50;
+
+        if (currentState === STATE.REELING) {
+            let bend = lineTension * 0.6; rodTipX -= bend; rodTipY += bend * 1.2; controlY += bend * 1.5;
+        } else if (currentState === STATE.CASTING) {
+            rodTipX -= castPower; rodTipY -= castPower * 0.5;
+        }
+        ctx.quadraticCurveTo(boatX + 50, controlY, rodTipX, rodTipY); ctx.stroke();
+
+        if (bobber.active || currentState === STATE.REELING) {
+            if (currentState === STATE.REELING && lineTension > 85) {
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.9)';
+                rodTipX += (Math.random() - 0.5) * 6; rodTipY += (Math.random() - 0.5) * 6; ctx.lineWidth = 2;
+            } else {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; ctx.lineWidth = 1;
+            }
+            ctx.beginPath(); ctx.moveTo(rodTipX, rodTipY);
+            if (currentState === STATE.REELING && lineTension > 10) {
+                 ctx.lineTo(bobber.x, bobber.y + bobber.dipOffset);
+            } else {
+                 ctx.quadraticCurveTo(boatX + (bobber.x - boatX)/2, rodTipY + 50, bobber.x, bobber.y + bobber.dipOffset);
+            }
+            ctx.stroke();
+        }
+    }
+
+    function drawForeground() {
+        if(currentLocation.foregroundType === 'none') return;
+        foregroundElements.forEach(el => {
+            if (el.type === 'reed') {
+                let sway = Math.sin((time * el.swaySpeed) + el.offset) * 15;
+                let reedGrad = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - el.height);
+                reedGrad.addColorStop(0, currentLocation.id === 'kelp' ? '#0f766e' : '#064e3b');
+                reedGrad.addColorStop(1, currentLocation.id === 'kelp' ? '#14b8a6' : '#059669');
+                ctx.strokeStyle = reedGrad; ctx.lineWidth = 4; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(el.x, canvas.height);
+                ctx.quadraticCurveTo(el.x + (sway * 0.5), canvas.height - (el.height * 0.5), el.x + sway, canvas.height - el.height);
+                ctx.stroke();
+
+                if(el.height > 100) {
+                    ctx.fillStyle = '#451a03'; ctx.save();
+                    ctx.translate(el.x + (sway * 0.8), canvas.height - el.height + 20); ctx.rotate(sway * 0.01);
+                    ctx.beginPath(); ctx.ellipse(0, 0, 4, 15, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+                }
+            } else if (el.type === 'pylon') {
+                ctx.fillStyle = '#1c1917'; ctx.save();
+                ctx.translate(el.x, canvas.height); ctx.rotate(el.tilt);
+                ctx.fillRect(-el.width/2, -el.height, el.width, el.height);
+                ctx.fillStyle = '#292524'; ctx.fillRect(-el.width/2 + 2, -el.height, 2, el.height); ctx.restore();
+            } else if (el.type === 'tree') {
+                ctx.strokeStyle = el.isRed ? '#450a0a' : '#020617';
+                ctx.lineWidth = 12 * el.scale; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                ctx.save(); ctx.translate(el.x, canvas.height); if (el.flip) ctx.scale(-1, 1);
+                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(20 * el.scale, -100 * el.scale); ctx.lineTo(50 * el.scale, -250 * el.scale); ctx.stroke();
+                ctx.lineWidth = 6 * el.scale; ctx.beginPath(); ctx.moveTo(20 * el.scale, -100 * el.scale);
+                ctx.lineTo(-30 * el.scale, -180 * el.scale); ctx.moveTo(35 * el.scale, -180 * el.scale);
+                ctx.lineTo(90 * el.scale, -220 * el.scale); ctx.stroke(); ctx.restore();
+            }
+        });
+    }
+
+    function drawBobber() {
+        if (!bobber.active && currentState !== STATE.REELING) return;
+        let bx = bobber.x, by = bobber.y + bobber.dipOffset;
+        if (currentState !== STATE.REELING) {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(bx, bobber.y + 2, 8, 3, 0, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(bx, by, 5, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI); ctx.fill();
+        ctx.strokeStyle = '#000000'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(bx - 5, by); ctx.lineTo(bx + 5, by); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx, by - 5); ctx.lineTo(bx, by - 10); ctx.stroke();
+    }
+
+    function drawUI() {
+        if (currentState === STATE.CASTING) {
+            let bY = boatY + Math.sin(time * 2) * 2;
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(boatX - 30, bY - 110, 60, 10);
+            let powerColor = `hsl(${120 - (castPower * 1.2)}, 100%, 50%)`;
+            ctx.fillStyle = powerColor; ctx.fillRect(boatX - 30, bY - 110, (castPower / 100) * 60, 10);
+            ctx.strokeStyle = '#fff'; ctx.strokeRect(boatX - 30, bY - 110, 60, 10);
+        }
+    }
+
+    let lastTime = 0;
+    function gameLoop(timestamp) {
+        let deltaTime = timestamp - lastTime; lastTime = timestamp;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if(currentState === STATE.MAP) {
+            time += deltaTime * 0.001; drawMap();
+        } else {
+            updatePhysics(deltaTime); drawEnvironment(); drawFishermanAndBoat();
+            drawBobber(); drawRipples(); drawAmbient(); drawParticles(); drawForeground(); drawUI();
+        }
+        requestAnimationFrame(gameLoop);
+    }
+    initGame();
+
+</script>
+</body>
+</html>
