@@ -188,14 +188,48 @@
     const boatSpeed = 3.5;
 
     // --- LORE UPDATED FISH DATABASE ---
-    const fishTypes = [
-        { id: 'can', name: "Rust-Clogged Filter", difficulty: "Easy", color: "#9ca3af", pullSpeed: 0.1, tensionRate: 1.2, struggleChance: 0.005, struggleMultiplier: 5, score: 10 },
-        { id: 'perch', name: "Dusk Perch", difficulty: "Easy", color: "#fbbf24", pullSpeed: 0.15, tensionRate: 1.5, struggleChance: 0.01, struggleMultiplier: 8, score: 25 },
-        { id: 'trout', name: "Signal Trout", difficulty: "Medium", color: "#60a5fa", pullSpeed: 0.25, tensionRate: 2.0, struggleChance: 0.02, struggleMultiplier: 10, score: 50 },
-        { id: 'eel', name: "Hexed Eel", difficulty: "Hard", color: "#a855f7", pullSpeed: 0.4, tensionRate: 2.8, struggleChance: 0.035, struggleMultiplier: 15, score: 100 },
-        { id: 'grouper', name: "Pale-Eyed Grouper", difficulty: "Hard", color: "#cbd5e1", pullSpeed: 0.45, tensionRate: 3.2, struggleChance: 0.04, struggleMultiplier: 18, score: 150 },
-        { id: 'lurker', name: "The Deep Lurker", difficulty: "Legendary", color: "#111827", pullSpeed: 0.5, tensionRate: 3.5, struggleChance: 0.05, struggleMultiplier: 20, score: 300 }
-    ];
+    let fishTypes = [];
+
+async function initGame() {
+    try {
+        const response = await fetch('fishes.json');
+        fishTypes = await response.json();
+    } catch (e) {
+        console.error("Failed to load fishes.json", e);
+        // Fallback
+        fishTypes = [ { id: 'can', name: "Fallback Fish", difficulty: "Easy", color: "#9ca3af", pullSpeed: 0.1, tensionRate: 1.2, struggleChance: 0.005, struggleMultiplier: 5, score: 10, weight: [1,2], biomes: ["shallows"] } ];
+    }
+
+    // Populate biomes with fish
+    Object.values(BIOMES).forEach(b => {
+        if (b.isWater) b.fishSpawns = [];
+    });
+
+    const difficultyWeight = { "Easy": 60, "Medium": 30, "Hard": 15, "Legendary": 5 };
+
+    fishTypes.forEach(fish => {
+        if (fish.biomes) {
+            fish.biomes.forEach(biomeId => {
+                const biomeKey = Object.keys(BIOMES).find(k => BIOMES[k].id === biomeId);
+                if (biomeKey) {
+                    let w = difficultyWeight[fish.difficulty] || 10;
+                    BIOMES[biomeKey].fishSpawns.push({ id: fish.id, weight: w });
+                }
+            });
+        }
+    });
+
+    // Fallback if empty
+    Object.values(BIOMES).forEach(b => {
+        if (b.isWater && b.fishSpawns.length === 0) {
+             b.fishSpawns.push({id: fishTypes[0].id, weight: 100});
+        }
+    });
+
+    // Set initial state AFTER data loads
+    // Initialization moved to initGame
+    requestAnimationFrame(gameLoop);
+}
 
     // --- BIOMES ---
     const BIOMES = {
