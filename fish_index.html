@@ -1145,6 +1145,12 @@ async function initGame() {
         }
         requestAnimationFrame(gameLoop);
     }
+
+    function initGame() {
+        lastTime = 0;
+        requestAnimationFrame(gameLoop);
+    }
+
     initGame();
 
 </script>
