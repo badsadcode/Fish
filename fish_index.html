@@ -608,8 +608,19 @@
     canvas.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('pointerup', handlePointerUp);
     
-    function showPrompt(text, color = "white", duration = 0, style="catch-text") {
-        actionPrompt.innerHTML = `<span class="${style}" style="color: ${color}">${text}</span>`;
+    function showPrompt(content, color = "white", duration = 0, style="catch-text") {
+        actionPrompt.textContent = '';
+        const span = document.createElement('span');
+        span.className = style;
+        span.style.color = color;
+
+        if (content instanceof HTMLElement || content instanceof DocumentFragment) {
+            span.appendChild(content);
+        } else {
+            span.textContent = content;
+        }
+
+        actionPrompt.appendChild(span);
         actionPrompt.classList.remove('hidden');
         if (duration > 0) setTimeout(hidePrompt, duration);
     }
@@ -657,7 +668,25 @@
         
         if (success) {
             score += currentFish.score; scoreDisplay.innerText = score;
-            showPrompt(`CAUGHT:<br><span style="font-size:0.6em; color:${currentFish.color}">${currentFish.name}</span><br><span style="font-size:0.4em">+${currentFish.score} PTS</span>`, "#4ade80");
+
+            const caughtContainer = document.createDocumentFragment();
+            caughtContainer.appendChild(document.createTextNode("CAUGHT:"));
+            caughtContainer.appendChild(document.createElement('br'));
+
+            const nameSpan = document.createElement('span');
+            nameSpan.style.fontSize = "0.6em";
+            nameSpan.style.color = currentFish.color;
+            nameSpan.textContent = currentFish.name;
+            caughtContainer.appendChild(nameSpan);
+
+            caughtContainer.appendChild(document.createElement('br'));
+
+            const scoreSpan = document.createElement('span');
+            scoreSpan.style.fontSize = "0.4em";
+            scoreSpan.textContent = `+${currentFish.score} PTS`;
+            caughtContainer.appendChild(scoreSpan);
+
+            showPrompt(caughtContainer, "#4ade80");
             spawnParticles(bobber.x, bobber.y, 30, currentFish.color);
         } else {
             if (lineTension >= 100) showPrompt("LINE SNAPPED!", "#ef4444");
